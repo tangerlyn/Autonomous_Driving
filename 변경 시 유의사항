@@ -1,0 +1,36 @@
+<현재 작업중인 도커: 69>
+시간순: 89 -> 9f -> 69
+
+
+<map 변경 시 수정사항>
+1. 측위 스택
+src/particle_filter의 maps/에 [지도이름].yaml과 [지도이름].pgm 추가
+
+2. 시뮬레이션 스택
+src/f1tenth_gym_ros의 config/sim.yaml에 map 경로와 확장자 변경
+src/f1tenth_gym_ros의 maps/에 [지도이름].yaml과 [지도이름].pgm 추가
+
+3. 제어 알고리즘 스택
+src/CL2-Waterloo/pure_pursuit의 racelines/에 [지도이름].csv 추가 (light버전 csv파일이어야 함)
+src/CL2-Waterloo/pure_pursuit의 config/sim_config.yaml에 waypoints_path(두개) [지도이름].csv로 변경 (light버전 csv)
+src/CL2-Waterloo/pure_pursuit의 src/waypoint_visualizer.cpp에 waypoints_path 변경
+src/lqr_pid의 racelines/에 [지도이름].csv 추가 (full버전)
+src/lqr_pid의 config/sim_config.yaml에 waypoints_path(두개) [지도이름].csv로 변경 (full버전)
+src/lqr_pid의 src/waypoint_visualizer.cpp에 waypoints_path 변경
+
+
+
+<waypoints 시각화 주의사항>
+1. pure_pursuit의 측위 rviz에서 총 3개의 waypoints관련 토픽 존재.
+1) /waypoints: basic_light.csv에서 가져온 waypoints들 시각화(초록색 점선)
+이 때 sim_config.yaml에 해당 토픽 정보 정의하지 않음 -> waypoint_visualizer.cpp에서 정의하고 발행함.
+2) /current_waypoint: 현재 고려하는 waypoint(파란 점)
+이 토픽은 sim_config.yaml에서 정의함
+3) /lookahead_waypoint: 현재 고려하는 lookahead point(빨간 점)
+이 토픽은 sim_config.yaml에서 정의함
+** src/pure_pursuit.cpp의 waypoints_path 파라미터 선언 부분이 시각화에 영향을 미치는지 모르겠음
+
+2. lqr_pid의 측위 rivz에서 1개의 waypoint 토픽 정의 -> 단일한 조향각 예측이므로 시각화 어려움
+1) /waypoints: basic.csv에서 가져온 waypoints들 시각화(초록색 점선)
+이 때 config파일에 정의하지 않고 waypoint_visualizer.cpp에서 정의하고 발행함
+** src/lqr_pid.cpp의 waypoints_path 파라미터 선언 부분이 시각화에 영향을 미치는지 모르겠음
