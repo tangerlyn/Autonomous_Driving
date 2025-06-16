@@ -97,7 +97,7 @@ LQRPID::LQRPID() : Node("lqr_pid_node") {
 
     pub_drive = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 25);
     //pub_vis_lqr_traj = this->create_publisher<visualization_msgs::msg::Marker>(rviz_lqr_traj_topic, 10);
-    pub_vis_nearest_point = this->create_publisher<visualization_msgs::msg::Marker>(rviz_nearest_point_topic, 10);
+    //pub_vis_nearest_point = this->create_publisher<visualization_msgs::msg::Marker>(rviz_nearest_point_topic, 10);
 
     // not use in world frame.. it's for pure pursuit
     //tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -308,6 +308,8 @@ void LQRPID::publish_message(double x, double y, double yaw, double velocity) {
 }
 
 void LQRPID::odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg) {
+    RCLCPP_INFO(this->get_logger(), "odom_callback called!");
+    RCLCPP_INFO(this->get_logger(), "odom_topic = %s", odom_topic.c_str());
     double x = msg->pose.pose.position.x;
     double y = msg->pose.pose.position.y;
 
@@ -340,11 +342,11 @@ void LQRPID::timer_callback() {
     dt = this->get_parameter("dt").as_double();
 }
 
-int main(int argc, char ** argv)
+int main(int argc, char **argv)
 {
-  (void) argc;
-  (void) argv;
-
-  printf("hello world lqr_pid package\n");
+  rclcpp::init(argc, argv);
+  auto node_ptr = std::make_shared<LQRPID>();
+  rclcpp::spin(node_ptr);
+  rclcpp::shutdown();
   return 0;
 }
