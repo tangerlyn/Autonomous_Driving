@@ -134,7 +134,7 @@ void LQRPID::load_waypoints() {
     while (std::getline(csvFile_waypoints, line)) {
         std::stringstream s(line);
         std::vector<std::string> tokens;
-        while (std::getline(s, word, ',')) {
+        while (std::getline(s, word, ';')) {
             tokens.push_back(word);
         }
 
