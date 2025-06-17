@@ -95,6 +95,17 @@ private:
     double lqr_q_y = 100.0;
     double lqr_q_yaw = 100.0;
     double lqr_r_steer = 1.0;
+
+    // lap tracking
+    rclcpp::Time start_time_;
+    rclcpp::Time end_time_;
+    bool lap_started_ = false;
+    bool lap_finished_ = false;
+    double start_x_ = 0.0;
+    double start_y_ = 0.0;   
+    // CTE tracking
+    double total_cte = 0.0;
+    int cte_count = 0; 
 };
 
 Eigen::Matrix4d solve_dare(const Eigen::Matrix4d& A,

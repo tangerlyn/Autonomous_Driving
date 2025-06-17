@@ -103,6 +103,9 @@ LQRPID::LQRPID() : Node("lqr_pid_node") {
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
     transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
+    lap_started_ = false;
+    lap_finished_ = false;
+
     RCLCPP_INFO(this->get_logger(), "LQR-PID node has been launched");
 
     load_waypoints();
@@ -184,7 +187,6 @@ std::pair<int, double> LQRPID::find_nearest_point(
     int nearest_ind = 0;
     double min_d2 = std::numeric_limits<double>::infinity();
 
-    // 1. 가장 가까운 인덱스 찾기
     for (std::size_t i = 0; i < cx.size(); ++i) {
         double dx = cx[i] - x;
         double dy = cy[i] - y;
@@ -195,16 +197,14 @@ std::pair<int, double> LQRPID::find_nearest_point(
         }
     }
 
-    // 2. lateral error 계산 (최근접 기준)
     double e = std::sqrt(min_d2);
     double angle = pi2pi(cyaw[nearest_ind] - std::atan2(cy[nearest_ind] - y, cx[nearest_ind] - x));
     if (angle < 0.0) e = -e;
 
-    // 3. preview horizon 적용
-    int preview_horizon = 2;  // 실험적으로 조정: 10 ~ 20
+    int preview_horizon = 2;
     int target_ind = std::min(nearest_ind + preview_horizon, static_cast<int>(cx.size() - 1));
 
-    return {target_ind, e};  // target point index와 최근접 기준 lateral error 반환
+    return {target_ind, e};
 }
 
 
@@ -229,8 +229,15 @@ double LQRPID::pid_velocity(double x, double y, double yaw, double v) {
         pid_ki * velocity_error_sum +
         pid_kd * d_error
     );
+    //double output = pid_kp * error + pid_ki * velocity_error_sum + pid_kd * d_error;
 
     output = std::clamp(output, 0.0, max_speed);
+    RCLCPP_INFO(this->get_logger(),
+        "[PID VELOCITY] v=%.3f, v_ref=%.3f, v_error=%.3f | gain=%.3f, output=%.3f",
+        v, v_ref, error, gain_scale, output
+    );
+    /*RCLCPP_INFO(this->get_logger(), "[PID] v=%.3f, v_ref=%.3f, v_error=%.3f, output=%.3f",
+		    v, v_ref, error, output);*/
 
     prev_velocity_error = error;
 
@@ -261,16 +268,13 @@ Eigen::Matrix<double,1,4> dlqr(const Eigen::Matrix4d& A, const Eigen::Matrix<dou
 
 
 SteeringState LQRPID::lqr_steering(double x, double y, double yaw, double v) {
-    // 1. 최근접 인덱스 + preview 적용
     auto [ind, e] = find_nearest_point(
         waypoints.x_m, waypoints.y_m, waypoints.psi_rad, x, y);
 
-    // 2. 추종 대상 waypoint의 방향 및 곡률
     double psi = waypoints.psi_rad[ind];
     double k = waypoints.kappa_radpm[ind];
     double th_e = pi2pi(yaw - psi);  // heading error
 
-    // 3. 속도 조건 검사
     if (std::abs(v) < 0.1) {
         SteeringState s;
         s.steering_angle = 0.0;
@@ -280,7 +284,6 @@ SteeringState LQRPID::lqr_steering(double x, double y, double yaw, double v) {
         return s;
     }
 
-    // 4. 상태-입력 행렬 정의
     double direction = (v >= 0) ? 1.0 : -1.0;
 
     Eigen::Matrix4d A = Eigen::Matrix4d::Zero();
@@ -318,15 +321,19 @@ SteeringState LQRPID::lqr_steering(double x, double y, double yaw, double v) {
     prev_lateral_error_ = e;
     prev_yaw_error_ = th_e;
 
-    // 디버깅 출력
     RCLCPP_INFO(this->get_logger(), "LQR idx=%d, e=%.3f, th_e=%.3f, psi=%.3f, yaw=%.3f, delta=%.3f",
                 ind, e, th_e, psi, yaw, delta);
-
+    
     SteeringState state;
     state.steering_angle = delta;
     state.index = ind;
     state.lateral_error = e;
     state.yaw_error = th_e;
+    
+    // CTE
+    total_cte += std::abs(e);
+    cte_count++;
+    
     return state;
 }
 
@@ -359,7 +366,6 @@ void LQRPID::odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg) {
         return;
     }
 
-    // 위치 변환
     const auto& t = tf.transform.translation;
     const auto& r = tf.transform.rotation;
     tf2::Vector3 translation(t.x, t.y, t.z);
@@ -381,8 +387,36 @@ void LQRPID::odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg) {
         yaw -= M_PI_2;
         yaw = pi2pi(yaw);
 
-   double velocity = msg->twist.twist.linear.x;
+    double velocity = msg->twist.twist.linear.x;
 
+    // lab time log
+    if (!lap_started_) {
+        start_x_ = x;
+        start_y_ = y;
+        start_time_ = this->now();
+        lap_started_ = true;
+        RCLCPP_INFO(this->get_logger(), "Lap started at %.2f", start_time_.seconds());
+    }
+
+    double dx = x - start_x_;
+    double dy = y - start_y_;
+    double dist = std::sqrt(dx * dx + dy * dy);
+
+    //double elapsed_time = (this->now() - start_time_).seconds();
+    if (lap_started_ && !lap_finished_ && dist < 1.0 && (this->now() - start_time_).seconds() > 1.0) {
+        end_time_ = this->now();
+        lap_finished_ = true;
+
+        double lap_time = (end_time_ - start_time_).seconds();
+        // average CTE log
+        double avg_cte = (cte_count > 0) ? total_cte / static_cast<double>(cte_count) : 0.0;
+
+        RCLCPP_INFO(this->get_logger(),
+			"\n\n============================================\n"
+			"Lap finished! Time: %.2f seconds, Avg CTE: %.4f\n"
+			"============================================\n",
+		       	lap_time, avg_cte);
+    }
 
     publish_message(x, y, yaw, velocity);
 }
