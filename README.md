@@ -36,9 +36,9 @@ ROS 2 / F1TENTH Gym 환경에서 동작하는 자율주행 레이스카의 **경
 
 ### 노드 구조 (RQT Graph)
 
-![RQT Graph](docs/images/rqt_graph.png)
+![RQT Graph](docs/images/rqt_graph.svg)
 
-`lqr_pid_node`가 파티클 필터(`/particle_filter`)로부터 추정 위치(`/pf/pose/odom`)를 받아 `/sim/drive`로 조향·속도 명령을 퍼블리시하는 구조입니다.
+`lqr_pid_node`가 파티클 필터(`/particle_filter`)로부터 추정 위치(`/pf/pose/odom`)를 받아 `/sim/drive`로 조향·속도 명령을 퍼블리시하는 구조입니다. (원본 rqt_graph 스크린샷의 해상도가 낮아 가독성을 위해 동일한 노드/토픽 구성으로 다시 그린 벡터 이미지입니다.)
 
 ## 알고리즘 개요
 
