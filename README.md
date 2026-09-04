@@ -34,6 +34,12 @@ ROS 2 / F1TENTH Gym 환경에서 동작하는 자율주행 레이스카의 **경
 
 > `lqr_pid`는 F1TENTH 워크스페이스(`f1tenth_ws`)의 `src/` 하위 패키지로 동작하도록 만들어졌으며, `particle_filter`(측위)·`f1tenth_gym_ros`(시뮬레이터) 등 워크스페이스의 다른 패키지가 함께 있어야 합니다. 토픽 흐름과 노드 구조는 `pure_pursuit`, `mpc` 패키지를 참고해 설계했습니다.
 
+### 노드 구조 (RQT Graph)
+
+![RQT Graph](docs/images/rqt_graph.png)
+
+`lqr_pid_node`가 파티클 필터(`/particle_filter`)로부터 추정 위치(`/pf/pose/odom`)를 받아 `/sim/drive`로 조향·속도 명령을 퍼블리시하는 구조입니다.
+
 ## 알고리즘 개요
 
 ### LQR 조향 제어 (`lqr_steering`)
@@ -73,12 +79,27 @@ ros2 launch lqr_pid sim_lqr_pid_launch.py
 
 `lqr_pid`와 `pure_pursuit`을 동일한 속도·조향 한계값 조건에서 비교했습니다 (평가지표: 랩타임, 평균 CTE).
 
-| 맵 | 제어기 | 랩타임 | 평균 CTE |
-|---|---|---|---|
-| Basic map | Pure Pursuit | 16.13 s | 0.068 m |
-| Basic map | **LQR-PID** | **14.08 s** (−12.7%) | 0.124 m |
-| wall1 map (급커브 포함) | Pure Pursuit | 22.28 s | 0.079 m |
-| wall1 map (급커브 포함) | **LQR-PID** | **21.81 s** (−2.1%) | 0.1117 m |
+#### Basic map
+
+<img src="docs/images/map_basic.png" alt="Basic map" width="420"/>
+
+| 제어기 | 랩타임 | 평균 CTE |
+|---|---|---|
+| Pure Pursuit | 16.13 s | 0.068 m |
+| **LQR-PID** | **14.08 s** (−12.7%) | 0.124 m |
+
+![basic map 성능 비교](docs/images/result_basic.png)
+
+#### wall1 map (급커브 포함)
+
+<img src="docs/images/map_wall1.png" alt="wall1 map" width="420"/>
+
+| 제어기 | 랩타임 | 평균 CTE |
+|---|---|---|
+| Pure Pursuit | 22.28 s | 0.079 m |
+| **LQR-PID** | **21.81 s** (−2.1%) | 0.1117 m |
+
+![wall1 map 성능 비교](docs/images/result_wall1.png)
 
 - **LQR-PID**는 두 맵 모두에서 더 빠른 랩타임을 기록했습니다. 곡률 기반 피드포워드 조향으로 보다 공격적인 경로 추종이 가능했기 때문으로 분석됩니다.
 - 반면 평균 CTE는 **Pure Pursuit**가 더 낮았습니다. LQR의 높은 응답성 때문에 급커브 구간에서 미세한 흔들림(jerk)이 관찰되었고, 이는 빠른 랩타임과의 트레이드오프로 해석됩니다.
